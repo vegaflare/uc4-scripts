@@ -1,0 +1,31 @@
+! Simple set of instructions to update put earliest start based on conditions.
+! this script is to be set in the post processing of a JOBS, if the JOBS is ended_OK, then hold the next job (in this case it is 'JOBS.WIN.1')
+!
+! Conditions of delayed run
+! if completed this scr is running before 12PM, which is defined as 1200- set earliest start at same day 12PM else, set it as next day 12PM
+
+
+:set &jobStatus# = get_uc_object_status()
+:if &jobStatus# = 1900
+:  set &RunID# = SYS_ACT_PARENT_NR()
+:  set &presentTime# = SYS_TIME_PHYSICAL("HHMM")
+:  set &activationTimeStamp# = GET_STATISTIC_DETAIL(&runID#, ACTIVATION_TIME)
+:  p "Activation: &activationTimeStamp#"
+:  set &activationDate# = mid(&activationTimeStamp#, 1, 10)
+:  p "Activation: &activationDate#"
+:  set &presentDate# = sys_date_physical("YYYY-MM-DD")
+:  set &delayDays# = diff_date("YYYY-MM-DD:&presentDate#", "YYYY-MM-DD:&activationDate#")
+:  p &delayDays#
+:  p &presentTime#
+:  if &PresentTime# > 1200
+:    set &delayDays# = add(&delayDays#, 1)
+:  endif
+:  set &delayDays# = format(&delayDays#, "00")
+:  p "Adjusted: &delayDays#"
+
+:  set &stopFlow# = modify_task(&RunID#, STOP_MODIFY)
+:  set &modTask# = modify_task(&RunID#, "JOBS.WIN.1", , EARLIEST_START, "&delayDays#/12:00")
+:  set &commit# = modify_task(&RunID#, COMMIT)
+:  set &go# = modify_task(&RunID#, GO)
+
+:endif
