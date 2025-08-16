@@ -1,0 +1,17 @@
+-- ******Configs/Requirements*******
+-- > Object type    : SEC_SQLI VARA
+-- > Bind Variables : &LDATE# (last date to look for), &client#
+-- *********************************
+select eh_name, eh_ah_idnr
+from eh
+where eh_status in (1560, 1563)
+and eh_client = ?
+and to_char(EH_ActivationTime, 'YYYYMMDD') < ?
+and eh_otype in ('JOBS','JOBP','JOBF','SCRI','EVNT')
+order by 
+    case 
+       when eh_starttype = '<JSCH>' then '001' 
+       when eh_starttype = '<ONCE>' then '002'
+       when eh_starttype is null then '003' 
+       else eh_starttype
+    end

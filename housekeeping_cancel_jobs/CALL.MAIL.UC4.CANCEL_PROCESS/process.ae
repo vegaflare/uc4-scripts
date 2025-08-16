@@ -1,0 +1,24 @@
+:put_att SUBJECT            = "[INFO] UC4 EH Housekeeping"
+!
+! Config
+:set &counter_variable#     = "VAR.CANCELLATION.PROC.COUNTER"
+:set &clients_list#         = "VAR.HOUSEKEEPING.CLIENTS"
+:set &rows#                 = ""
+
+:set &clients_list_handler# = prep_process_var(&clients_list#)
+:process &clients_list_handler#
+!
+! Reading data client wise
+:  set &client#             = get_process_line(&clients_list_handler#, 1)
+:  set &success_count#      = get_var(&counter_variable#, "&client#_success")
+:  set &failure_count#      = get_var(&counter_variable#, "&client#_failure")
+:  set &total_count#        = get_var(&counter_variable#, "&client#_total")
+!
+! Formatting the numbers
+:  set &success_count#      = format(&success_count#)
+:  set &failure_count#      = format(&failure_count#)
+:  set &total_count#        = format(&total_count#)
+!
+! Generating rows for HTML table
+:  set &rows#               = STR_CAT(&rows#, '<tr><td class="c1">&client#</td><td class="c2"><span class="box-success">&success_count#</span></td><td class="c3"><span class="box-fail">&failure_count#</span></td><td class="c4"><span class="box-total">&total_count#</span></td></tr>')
+:endprocess

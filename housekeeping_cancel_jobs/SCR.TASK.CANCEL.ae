@@ -1,0 +1,143 @@
+! *****Fixes**************
+! (1.1) - Enforce row_limit
+! (1.2) - Track status of latest run before restart
+! ************************
+!
+!!******Config/Requirements************
+! - Job type   : Win/Unix (Post-processing)
+! - Attributes : Activate at Runtime, Job group - GROUP.HOUSEKEEPING_CANCEL
+!*************************************
+!
+!
+! Configs
+! *******************************************************************
+!
+:set &counter_variable#  = "VAR.CANCELLATION.PROC.COUNTER"
+:set &restart_count_key# = "&client#_rerun_count"
+:set &success_count_key# = "&client#_success"
+:set &failure_count_key# = "&client#_failure"
+:set &total_count_key#   = "&client#_total"
+:set &row_limit# = 1
+:pset &number_of_rows# = 0
+
+
+! put_att ARCHIVE_KEY1      = "Client - &CLIENT#"
+! *******************************************************************
+!
+!
+! checking if the current instance is resarted once
+!
+:set &restart# = GET_STATISTIC_DETAIL(, RESTART,)
+
+! if not restarted we will initialize the restart count as 0. else if restart required
+! we get the count from &counter_variable# and increment it.
+! ********************************************************************
+
+:if &restart# = 'Y'
+
+:  set &restart_count# = get_var(&counter_variable#, &restart_count_key#)
+:  set &restart_count# = ADD(&restart_count#, 1)
+:  put &counter_variable#, &restart_count_key#, &restart_count#
+:  set &restart_count# = format(&restart_count#)
+!
+! -> Fix (1.2) - put latest runid into the counter variable
+!
+:  set &latest_rnr# = GET_STATISTIC_DETAIL(, RUNID,)
+:  put &counter_variable#, "housekeeping_job_rnr_latest_&CLIENT#", &latest_rnr#
+! : put_att ARCHIVE_KEY1     = "&today_date# - Run: &restart_count#"
+:else
+:  set &main_rnr# = sys_act_me_nr()
+:  put &counter_variable#, "housekeeping_job_rnr_main_&CLIENT#", &main_rnr#
+:  put &counter_variable#, "housekeeping_job_rnr_latest_&CLIENT#", &main_rnr#
+! ->
+!
+:  set &restart_count# = 0
+:  put &counter_variable#, &success_count_key#, 0
+:  put &counter_variable#, &failure_count_key#, 0
+:  put &counter_variable#, &total_count_key#, 0
+:  put &counter_variable#, &restart_count_key#, &restart_count#
+! : put_att ARCHIVE_KEY1     = "&today_date# - Run: 0"
+:endif
+! *********************************************************************
+!
+
+
+:p "&LDATE# = &LDATE#"
+!
+:set &data_source# = PREP_PROCESS_VAR(VARA.SEC.SQLI.EH.CANCEL.DS)
+!
+! initializing counter values
+!
+:set &success_count# = 0
+:set &failure_count# = 0
+! -> Fix (1.1) - Adding counter variable to validate the actual number of loops
+:set &count_overall# = 0
+! ->
+
+! process the data in &data_source# and deactivate the tasks
+! *********************************************************************
+:set &number_of_rows# = get_process_info(&data_source#, ROWS)
+:pset &number_of_rows# = FORMAT(&number_of_rows#)
+:P "&number_of_rows# rows selected, will be processed in batches of &row_limit#"
+:process &data_source#
+:  set &count_overall# = ADD(&count_overall#, 1)
+:  set &task_name# = get_process_line(&data_source#, 2)
+:  set &run_id# = get_process_line(&data_source#, 3)
+:  add_comment &run_id#, "Cancelled by Housekeeping process"
+:  set &return_value# = CANCEL_UC_OBJECT(&run_id#)
+:  if &return_value# EQ 0
+:    set &success_count# = ADD(&success_count#, 1)
+:  else
+:    set &failure_count# = ADD(&failure_count#, 1)
+:  endif
+:  wait 2
+:  set &return_value# = DEACTIVATE_UC_OBJECT(&run_id#, FORCED)
+
+:  P "Job Name : &task_name#, RunID : &run_id#"
+:  P "Cancelled with return code: &return_value#"
+! -> Fix (1.1) - Exit process loop if the row limit is hit
+:  if &count_overall# >= &row_limit#
+:    term_process
+:  endif
+! ->
+:endprocess
+:close_process &data_source#
+
+! update the counter variable with the outcome of deactivation
+! ********************************************************************
+:set &counter_handler# = PREP_PROCESS_VAR(&counter_variable#, '&CLIENT#*')
+:process &counter_handler#
+:  set &current_selection# = get_process_line(&counter_handler#, 1)
+:  set &current_value# = get_process_line(&counter_handler#, 2)
+:  P &current_selection#, &current_value#
+:  switch &current_selection#
+:    case &success_count_key#
+:    set &current_value# = add(&current_value#, &success_count#)
+:    put &counter_variable#, &success_count_key#, &current_value#
+:    case &failure_count_key#
+:    set &current_value# = add(&current_value#, &failure_count#)
+:    put &counter_variable#, &failure_count_key#, &current_value#
+:    case &total_count_key#
+:    set &current_value# = add(&current_value#, &number_of_rows#)
+:    put &counter_variable#, &total_count_key#, &current_value#
+:  endswitch
+:endprocess
+
+:set &success_count#= format(&success_count#)
+:set &failure_count#= format(&failure_count#)
+
+! -> Update (1.1) - Print statements updated
+:p ""
+:P "Summary (Total rows: &number_of_rows# (Limited by &row_limit# per execution)"
+:p "Total    :&row_limit#"
+:P "Success  :&success_count#"
+:p "Failure  :&failure_count#"
+
+:if &number_of_rows# >= &row_limit#
+:  set &restart# = activate_uc_object(SCR.RESTART.CANCEL_PROCESS, , , , , PASS_VALUES)
+:endif
+! -> Fix (1.1) - Wait 5 seconds before exiting to ensure restart script is activated (increase this number if system is slow)
+:p "Wait 5 secs"
+:wait 5
+:p "Complete"
+! ->

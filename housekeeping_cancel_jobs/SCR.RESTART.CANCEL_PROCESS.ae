@@ -1,0 +1,34 @@
+!*****Fixes**************
+!(1.2) - 15/08/2025 - Wait till the previous cancel script is ended OK
+!************************
+!
+!
+!******Config/Requirements************
+! - Job type   : Win/Unix (Post-processing)
+! - Attributes : Activate at Runtime, Job group - GROUP.HOUSEKEEPING_CANCEL
+!*************************************
+!
+!
+:set &housekeeping_job_rnr_main# = get_var(VAR.CANCELLATION.PROC.COUNTER,"housekeeping_job_rnr_main_&CLIENT#")
+:set &housekeeping_job_rnr_latest# = get_var(VAR.CANCELLATION.PROC.COUNTER,"housekeeping_job_rnr_latest_&CLIENT#")
+:p "Main   : &housekeeping_job_rnr_main#"
+:p "Latest : &housekeeping_job_rnr_latest#"
+:print "Waiting for previous cancel run to complete"
+:Print "*********************************************"
+:set &prev_run_status# = get_uc_object_status(,&housekeeping_job_rnr_latest#)
+:while &prev_run_status# <= 1572
+:  wait 5
+:  set &prev_run_status# = get_uc_object_status(,&housekeeping_job_rnr_latest#)
+:endwhile
+:if &prev_run_status# <> 1900
+:  p "Previous cancel run was not ended OK - (Status:&prev_run_status#), exiting..."
+! Uncomment below line if email is needed when cancel job ends with another status
+!:set &mail_ret# = send_mail("receiver@domain.com","cc@domain.com", "UC4 Housekeeping process for Cancel stopped", "Job with runid: &housekeeping_job_rnr_latest# was not ended OK in client &CLIENT#, please check")
+:exit 0
+:else
+:p "rnr &housekeeping_job_rnr_latest# ended OK, resuming..."
+:endif
+:print "set restart_status# = restart_uc_object(SCR.TASK.CANCEL,&housekeeping_job_rnr_main#)"
+:set &restart_status# = restart_uc_object(SCR.TASK.CANCEL, &housekeeping_job_rnr_main#)
+:print "*********************************************"
+! ->

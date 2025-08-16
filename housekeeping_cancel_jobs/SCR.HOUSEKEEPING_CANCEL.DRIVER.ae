@@ -1,0 +1,24 @@
+!!******Config/Requirements************
+! - Job type   : Script or Win/Unix (Post-processing)
+! - Attributes : Activate at Runtime
+!*************************************
+:set &clients_list# = "VAR.HOUSEKEEPING.CLIENTS"
+:set &hold_days# = 30
+:pset &today_date# = sys_date("YYYYMMDD")
+:pset &LDATE# = sub_days("YYYYMMDD:&today_date#",&hold_days#)
+!*****************************************************************************
+! Iterate through the list of clients and trigger a deactivation process
+! for each client...
+! The restart task should be run in a job group to avoid parallel executions
+! ****************************************************************************
+
+:set &clients_list_handler# = prep_process_var(&clients_list#)
+
+:process &clients_list_handler#
+:  pset &client# = get_process_line(&clients_list_handler#, 1)
+:  set &runid# = activate_uc_object(SCR.TASK.CANCEL,,,,,PASS_VALUES)
+:  if &runid# > 0
+:    p "Cancellation process started for client '&client#' with rund id '&runid#'"
+:  endif
+:endprocess
+:wait 10
